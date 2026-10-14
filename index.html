@@ -1,0 +1,345 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --blue-deep:#0b3350;
+    --blue-mid:#134369;
+    --blue-line:#3a6f96;
+    --paper:#f6f3ea;
+    --accent:#e8823c;
+    --accent-2:#6fd0c7;
+    --danger:#c1543f;
+    --good:#4c9a52;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;}
+  .app{
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background-color:var(--blue-deep);
+    min-height:100vh;
+    color:var(--paper);
+    padding:24px 20px 40px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+  }
+  .wrap{max-width:900px;width:100%;}
+
+  .toolbar{
+    display:flex;
+    flex-wrap:wrap;
+    gap:10px;
+    align-items:center;
+    margin-bottom:16px;
+  }
+  .icon-btn{
+    display:flex;align-items:center;justify-content:center;
+    width:44px;height:44px;
+    background:var(--blue-mid);
+    border:1px solid var(--blue-line);
+    color:var(--paper);
+    border-radius:6px;
+    cursor:pointer;
+    transition:background .15s ease, transform .1s ease;
+    padding:0;
+  }
+  .icon-btn svg{width:21px;height:21px;stroke:var(--paper);fill:none;}
+  .icon-btn:hover{background:#1c5581;}
+  .icon-btn:active{transform:translateY(1px);}
+  .icon-btn.danger:hover{background:rgba(193,84,63,.25); border-color:var(--danger);}
+  .icon-btn.good:hover{background:rgba(76,154,82,.3); border-color:var(--good);}
+  .icon-btn:disabled{opacity:.3; cursor:not-allowed;}
+  .icon-btn:disabled:hover{background:var(--blue-mid);}
+  .spacer{width:1px;height:28px;background:var(--blue-line);margin:0 4px;}
+
+  .stage-outer{
+    border:1px solid var(--blue-line);
+    border-radius:6px;
+    background:var(--blue-mid);
+    padding:14px;
+  }
+  canvas{
+    display:block;
+    width:100%;
+    height:auto;
+    background:var(--paper);
+    border-radius:2px;
+    cursor:ns-resize;
+    touch-action:none;
+    outline:none;
+  }
+  canvas:focus-visible{box-shadow:0 0 0 3px var(--accent-2);}
+
+  .toast{
+    position:fixed;
+    bottom:26px; left:50%;
+    transform:translateX(-50%) translateY(20px);
+    background:var(--blue-mid);
+    border:1px solid var(--good);
+    padding:10px 18px;
+    border-radius:8px;
+    opacity:0;
+    transition:opacity .25s ease, transform .25s ease;
+    pointer-events:none;
+    display:flex; align-items:center;
+  }
+  .toast svg{width:20px;height:20px;stroke:var(--good);fill:none;}
+  .toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
+</style>
+
+<div class="app">
+  <div class="wrap">
+
+    <div class="toolbar">
+      <button class="icon-btn" id="undoBtn" disabled>
+        <svg viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9 14L4 9l5-5"/>
+          <path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>
+        </svg>
+      </button>
+      <button class="icon-btn danger" id="clearBtn" disabled>
+        <svg viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 6h18"/>
+          <path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/>
+          <path d="M19 6l-1 14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1L5 6"/>
+          <path d="M10 11v6M14 11v6"/>
+        </svg>
+      </button>
+
+      <div class="spacer"></div>
+
+      <button class="icon-btn good" id="copyBtn">
+        <svg viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 7l1-2.5A1.5 1.5 0 0 1 6.4 3.5h11.2A1.5 1.5 0 0 1 19 4.5L20 7"/>
+          <rect x="3" y="7" width="18" height="13" rx="2"/>
+          <circle cx="12" cy="13.5" r="3.4"/>
+        </svg>
+      </button>
+      <button class="icon-btn" id="downloadBtn">
+        <svg viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 3v12"/>
+          <path d="M7 10l5 5 5-5"/>
+          <path d="M4 19h16"/>
+        </svg>
+      </button>
+    </div>
+
+    <div class="stage-outer">
+      <canvas id="canvas" width="820" height="480" tabindex="0"></canvas>
+    </div>
+
+  </div>
+  <div class="toast" id="toast">
+    <svg viewBox="0 0 24 24" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+  </div>
+</div>
+
+<script>
+(function(){
+  // Наборы данных. Выбор: ?set=snacks (по умолчанию) или ?set=sport
+  const SETS = {
+    snacks: { max: 10, labelStep: 2, icons: ['🍎', '🍌', '🥣', '🥜'] },
+    sport:  { max: 8,  labelStep: 2, icons: ['⚽', '🏐', '🏀', '🏊'] }
+  };
+  const cfg = SETS[new URLSearchParams(location.search).get('set')] || SETS.snacks;
+
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  const undoBtn = document.getElementById('undoBtn');
+  const clearBtn = document.getElementById('clearBtn');
+  const copyBtn = document.getElementById('copyBtn');
+  const downloadBtn = document.getElementById('downloadBtn');
+  const toast = document.getElementById('toast');
+
+  const W = canvas.width, H = canvas.height;
+  const X0 = 64, X1 = W - 28;          // левая и правая граница поля
+  const Y_TOP = 28, Y_BASE = H - 78;   // верх шкалы и линия нуля
+  const UNIT = (Y_BASE - Y_TOP) / cfg.max;
+  const N = cfg.icons.length;
+  const SLOT = (X1 - X0) / N;
+  const BAR_W = SLOT * 0.5;
+
+  let heights = new Array(N).fill(0);
+  let history = [];   // снимки heights для отмены
+  let active = -1;    // столбик, который тянут
+  let hover = -1;     // подсвеченный столбик
+  let before = null;  // heights до начала перетаскивания
+  let kb = 0;         // столбик для клавиатуры
+
+  const barX = i => X0 + SLOT * i + (SLOT - BAR_W) / 2;
+  const valueY = v => Y_BASE - v * UNIT;
+
+  function roundRect(x, y, w, h, r){
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  function draw(){
+    ctx.clearRect(0, 0, W, H);
+
+    // сетка через 1, подписи через labelStep
+    for(let v = 0; v <= cfg.max; v++){
+      const y = Math.round(valueY(v)) + 0.5;
+      const labeled = v % cfg.labelStep === 0;
+      ctx.strokeStyle = labeled ? 'rgba(11,51,80,0.24)' : 'rgba(11,51,80,0.10)';
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(X0, y); ctx.lineTo(X1, y); ctx.stroke();
+      if(labeled){
+        ctx.strokeStyle = '#0b3350'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(X0 - 7, y); ctx.lineTo(X0, y); ctx.stroke();
+        ctx.fillStyle = '#0b3350';
+        ctx.font = '600 19px -apple-system, "Segoe UI", sans-serif';
+        ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+        ctx.fillText(String(v), X0 - 13, y);
+      }
+    }
+
+    // столбики
+    heights.forEach((h, i) => {
+      if(h === 0) return;
+      const x = barX(i), y = valueY(h);
+      ctx.fillStyle = '#e8823c';
+      ctx.fillRect(x, y, BAR_W, Y_BASE - y);
+      ctx.strokeStyle = '#b5601f'; ctx.lineWidth = 2;
+      ctx.strokeRect(x + 1, y + 1, BAR_W - 2, Y_BASE - y - 1);
+    });
+
+    // оси
+    ctx.strokeStyle = '#0b3350'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(X0, Y_TOP - 12); ctx.lineTo(X0, Y_BASE); ctx.lineTo(X1, Y_BASE); ctx.stroke();
+
+    // ручки на верхушках и иконки
+    heights.forEach((h, i) => {
+      const cx = barX(i) + BAR_W / 2, y = valueY(h);
+      roundRect(cx - 24, y - 7, 48, 14, 7);
+      ctx.fillStyle = (i === active || i === hover) ? '#6fd0c7' : '#0b3350';
+      ctx.fill();
+
+      ctx.font = '40px "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#0b3350';
+      ctx.fillText(cfg.icons[i], cx, Y_BASE + 42);
+    });
+  }
+
+  function toCanvas(e){
+    const r = canvas.getBoundingClientRect();
+    return { x: (e.clientX - r.left) * (W / r.width), y: (e.clientY - r.top) * (H / r.height) };
+  }
+  function slotAt(p){
+    if(p.x < X0 || p.x > X1 || p.y > Y_BASE + 16) return -1;
+    return Math.min(N - 1, Math.floor((p.x - X0) / SLOT));
+  }
+  const valueAt = y => Math.max(0, Math.min(cfg.max, Math.round((Y_BASE - y) / UNIT)));
+
+  function updateButtons(){
+    undoBtn.disabled = history.length === 0;
+    clearBtn.disabled = heights.every(h => h === 0);
+  }
+
+  canvas.addEventListener('pointerdown', (e) => {
+    const p = toCanvas(e);
+    const i = slotAt(p);
+    if(i === -1) return;
+    active = i; kb = i;
+    before = heights.slice();
+    try{ canvas.setPointerCapture(e.pointerId); }catch(err){}
+    heights[i] = valueAt(p.y);
+    draw();
+  });
+
+  canvas.addEventListener('pointermove', (e) => {
+    const p = toCanvas(e);
+    if(active !== -1){
+      const v = valueAt(p.y);
+      if(v !== heights[active]){ heights[active] = v; draw(); }
+      return;
+    }
+    const i = slotAt(p);
+    if(i !== hover){ hover = i; draw(); }
+  });
+
+  function endDrag(){
+    if(active === -1) return;
+    if(before.some((v, k) => v !== heights[k])) history.push(before);
+    active = -1; before = null;
+    draw();
+    updateButtons();
+  }
+  canvas.addEventListener('pointerup', endDrag);
+  canvas.addEventListener('pointercancel', endDrag);
+  canvas.addEventListener('pointerleave', () => {
+    if(active === -1 && hover !== -1){ hover = -1; draw(); }
+  });
+
+  // клавиатура: ← → выбрать столбик, ↑ ↓ изменить высоту
+  canvas.addEventListener('keydown', (e) => {
+    if(e.key === 'ArrowLeft' || e.key === 'ArrowRight'){
+      kb = Math.max(0, Math.min(N - 1, kb + (e.key === 'ArrowRight' ? 1 : -1)));
+    } else if(e.key === 'ArrowUp' || e.key === 'ArrowDown'){
+      const v = Math.max(0, Math.min(cfg.max, heights[kb] + (e.key === 'ArrowUp' ? 1 : -1)));
+      if(v !== heights[kb]){ history.push(heights.slice()); heights[kb] = v; updateButtons(); }
+    } else {
+      return;
+    }
+    e.preventDefault();
+    hover = kb;
+    draw();
+  });
+  canvas.addEventListener('blur', () => { if(active === -1){ hover = -1; draw(); } });
+
+  undoBtn.addEventListener('click', () => {
+    const last = history.pop();
+    if(!last) return;
+    heights = last;
+    draw();
+    updateButtons();
+  });
+
+  clearBtn.addEventListener('click', () => {
+    if(heights.every(h => h === 0)) return;
+    history.push(heights.slice());
+    heights = new Array(N).fill(0);
+    draw();
+    updateButtons();
+  });
+
+  function showToast(){
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 1600);
+  }
+
+  // картинка без подсветки
+  function cleanCanvas(){ hover = -1; active = -1; draw(); }
+
+  function download(){
+    const link = document.createElement('a');
+    link.download = 'diagram.png';
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+  }
+
+  downloadBtn.addEventListener('click', () => { cleanCanvas(); download(); });
+
+  copyBtn.addEventListener('click', () => {
+    cleanCanvas();
+    canvas.toBlob(async (blob) => {
+      try{
+        await navigator.clipboard.write([new ClipboardItem({'image/png': blob})]);
+      } catch(err){
+        download();
+      }
+      showToast();
+    });
+  });
+
+  draw();
+  updateButtons();
+})();
+</script>
