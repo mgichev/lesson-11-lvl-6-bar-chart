@@ -142,7 +142,9 @@
     snacks: { max: 10, labelStep: 2, icons: ['🍎', '🍌', '🥣', '🥜'] },
     sport:  { max: 8,  labelStep: 2, icons: ['⚽', '🏐', '🏀', '🏊'] }
   };
-  const cfg = SETS[new URLSearchParams(location.search).get('set')] || SETS.snacks;
+  const params = new URLSearchParams(location.search);
+  const setKey = SETS[params.get('set')] ? params.get('set') : 'snacks';
+  const cfg = SETS[setKey];
 
   const canvas = document.getElementById('canvas');
   const ctx = canvas.getContext('2d');
@@ -161,6 +163,11 @@
   const BAR_W = SLOT * 0.5;
 
   let heights = new Array(N).fill(0);
+  // ?h=9,6,6,3 — начальные высоты: так редактор открывается в отдельном окне с диаграммой ученика
+  (params.get('h') || '').split(',').forEach((s, i) => {
+    const v = parseInt(s, 10);
+    if(i < N && !isNaN(v)) heights[i] = Math.max(0, Math.min(cfg.max, v));
+  });
   let history = [];   // снимки heights для отмены
   let active = -1;    // столбик, который тянут
   let hover = -1;     // подсвеченный столбик
@@ -325,9 +332,23 @@
     link.click();
   }
 
-  downloadBtn.addEventListener('click', () => { cleanCanvas(); download(); });
+  // Внутри встройки BO скачивание и буфер обмена заблокированы:
+  // вместо них открываем редактор в отдельном окне с той же диаграммой.
+  let embedded = true;
+  try{ embedded = window.self !== window.top; }catch(err){}
+  function openStandalone(){
+    const url = location.href.split('?')[0] + '?set=' + setKey + '&h=' + heights.join(',');
+    window.open(url, '_blank', 'noopener');
+  }
+
+  downloadBtn.addEventListener('click', () => {
+    if(embedded){ openStandalone(); return; }
+    cleanCanvas();
+    download();
+  });
 
   copyBtn.addEventListener('click', () => {
+    if(embedded){ openStandalone(); return; }
     cleanCanvas();
     canvas.toBlob(async (blob) => {
       try{
